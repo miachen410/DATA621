@@ -1,0 +1,130 @@
+---
+title: "DATA 621 - Assignment 1"
+author: "Mia Chen"
+date: "2/26/2020"
+output: pdf_document
+---
+
+```{r}
+library(tidyverse)
+library(corrplot)
+library(psych)
+```
+
+```{r}
+train <- read.csv("https://raw.githubusercontent.com/miachen410/DATA621/master/moneyball-training-data.csv")
+
+head(train)
+```
+
+```{r}
+str(train)
+```
+
+```{r}
+# Cleaning the column names by removing TEAMS_
+names(train) <- gsub("TEAM_", "", names(train))
+```
+
+```{r}
+summary(train)
+```
+
+```{r}
+ggplot(train, aes(x = TARGET_WINS)) +
+  geom_histogram()
+```
+
+```{r}
+ggplot(train, aes(y = TARGET_WINS)) +
+  geom_boxplot()
+```
+
+```{r}
+train_complete <- na.omit(train)
+```
+
+```{r}
+corr_train <- cor(train, use = "complete.obs")
+corrplot(corr_train, type = "upper")
+```
+
+The correlation plot shows that TARGET_WINS is positively correlated with BATTING_H, BATTING_2B, BATTING_HR, BATTING_BB, PITCHING_H, PITCHING_HR, PITCHING_BB and negatively correlated with FIELDING_E. Thus we are going to construct our linear model by selecting from these attributes.
+
+
+```{r}
+train_select <- train %>% 
+  select("TARGET_WINS",
+         "BATTING_H", 
+         "BATTING_2B",
+         "BATTING_HR",
+         "BATTING_BB",
+         "PITCHING_H",
+         "PITCHING_HR",
+         "PITCHING_BB",
+         "FIELDING_E")
+```
+
+
+```{r}
+pairs.panels(train_select, method = "pearson")
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(train$BATTING_H, train$TARGET_WINS)
+plot(log(train$BATTING_H), train$TARGET_WINS)
+plot(train$BATTING_H, log(train$TARGET_WINS))
+plot(log(train$BATTING_H), log(train$TARGET_WINS))
+
+par(mfrow=c(2,2))
+plot(train$BATTING_H, train$TARGET_WINS)
+plot(sqrt(train$BATTING_H), train$TARGET_WINS)
+plot(train$BATTING_H, sqrt(train$TARGET_WINS))
+plot(sqrt(train$BATTING_H), sqrt(train$TARGET_WINS))
+```
+
+Not much differences were made after the transformations.
+
+```{r}
+lm1 <- lm(TARGET_WINS ~ log(BATTING_H), data = train_complete)
+summary(lm1)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(train$BATTING_2B, train$TARGET_WINS)
+plot(log(train$BATTING_2B), train$TARGET_WINS)
+plot(train$BATTING_2B, log(train$TARGET_WINS))
+plot(log(train$BATTING_2B), log(train$TARGET_WINS))
+
+par(mfrow=c(2,2))
+plot(train$BATTING_2B, train$TARGET_WINS)
+plot(sqrt(train$BATTING_2B), train$TARGET_WINS)
+plot(train$BATTING_2B, sqrt(train$TARGET_WINS))
+plot(sqrt(train$BATTING_2B), sqrt(train$TARGET_WINS))
+```
+
+```{r}
+lm2 <- lm(TARGET_WINS ~ BATTING_2B, data = train)
+summary(lm2)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(train$BATTING_BB, train$TARGET_WINS)
+plot(log(train$BATTING_BB), train$TARGET_WINS)
+plot(train$BATTING_BB, log(train$TARGET_WINS))
+plot(log(train$BATTING_BB), log(train$TARGET_WINS))
+
+par(mfrow=c(2,2))
+plot(train$BATTING_BB, train$TARGET_WINS)
+plot(sqrt(train$BATTING_BB), train$TARGET_WINS)
+plot(train$BATTING_BB, sqrt(train$TARGET_WINS))
+plot(sqrt(train$BATTING_BB), sqrt(train$TARGET_WINS))
+```
+
+```{r}
+lm3 <- lm(TARGET_WINS ~ log(BATTING_BB), data = train_complete)
+summary(lm3)
+```
