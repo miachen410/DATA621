@@ -1,130 +1,226 @@
 ---
-title: "DATA 621 - Assignment 1"
-author: "Mia Chen"
-date: "2/26/2020"
-output: pdf_document
+title: "data621_hw1_mia_wei"
+author: "Wei Zhou, Mia Chen"
+date: "2/29/2020"
+output: html_document
 ---
 
-```{r}
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r, echo=FALSE}
 library(tidyverse)
-library(corrplot)
-library(psych)
+library(caTools)
 ```
 
 ```{r}
-train <- read.csv("https://raw.githubusercontent.com/miachen410/DATA621/master/moneyball-training-data.csv")
-
-head(train)
+# Read in the data
+data <- read.csv("https://raw.githubusercontent.com/miachen410/DATA621/master/moneyball-training-data.csv")
+glimpse(data)
 ```
 
 ```{r}
-str(train)
+# Split data into training set and testing set by 7:3 ratio
+set.seed(123)
+train_ind = sample(seq_len(nrow(data)), size = nrow(data)*.7)
+train = data[train_ind, ]
+test = data[-train_ind, ]
 ```
+
+```{r}
+glimpse(train)
+```
+
+
+## 1. DATA EXPLORATION (25 Points)
+Describe the size and the variables in the moneyball training data set. Consider that too much detail will cause a manager to lose interest while too little detail will make the manager consider that you aren’t doing your job. Some suggestions are given below. Please do NOT treat this as a check list of things to do to complete the assignment. You should have your own thoughts on what to tell the boss. These are just ideas.
 
 ```{r}
 # Cleaning the column names by removing TEAMS_
 names(train) <- gsub("TEAM_", "", names(train))
-```
-
-```{r}
+names(test) <- gsub("TEAM_", "", names(test))
 summary(train)
 ```
 
+### a. Mean / Standard Deviation / Median
 ```{r}
 ggplot(train, aes(x = TARGET_WINS)) +
   geom_histogram()
 ```
 
+### b. Bar Chart or Box Plot of the data
 ```{r}
-ggplot(train, aes(y = TARGET_WINS)) +
-  geom_boxplot()
+library(reshape)
+library(ggplot2)
+par(mfrow = c(3, 3))
+datasub = melt(train)
+ggplot(datasub, aes(x= value)) + 
+    geom_density(fill='blue') + 
+    facet_wrap(~variable, scales = 'free') 
+```
+
+### c. Is the data correlated to the target variable (or to other variables?)
+Findings: 
+1. TEAM_BATTING_H exhibits the highest correlation to the response variable,
+2. TEAM_FIELDING_E exhibits the lowest correlation
+3. Both TEAM_PITCHING_HR and TEAM_PITCHING_BB exhibit positive correlations to the response variable 
+4. The correlation plot shows that TARGET_WINS is positively correlated with BATTING_H, BATTING_2B, BATTING_HR, BATTING_BB, PITCHING_H, PITCHING_HR, PITCHING_BB and negatively correlated with FIELDING_E. Thus we are going to construct our linear model by selecting from these attributes.
+
+```{r}
+library(corrplot)
+library(corrgram)
+corrplot(corrgram(train), method="circle")
+```
+
+### d. Are any of the variables missing and need to be imputed “fixed”?
+
+```{r,echo=FALSE}
+library(VIM)
+aggr_plot <- aggr(train, 
+                  col=c('grey','blue'), 
+                  numbers=TRUE, 
+                  sortVars=TRUE, 
+                  labels=names(train), 
+                  cex.axis=.7,
+                  gap=3, 
+                  ylab=c("Histogram of missing data","Pattern"))
+```
+
+## 2. DATA PREPARATION (25 Points)
+Describe how you have transformed the data by changing the original variables or creating new variables. If you did transform the data or create new variables, discuss why you did this. Here are some possible transformations.
+a. Fix missing values (maybe with a Mean or Median value)
+b. Create flags to suggest if a variable was missing
+c. Transform data by putting it into buckets
+d. Mathematical transforms such as log or square root (or use Box-Cox)
+e. Combine variables (such as ratios or adding or multiplying) to create new variables
+
+### Missing imputation 
+Considering some columns has outliers, we’ll fill in the missing values using their respective median values.
+```{r}
+train_clean = train %>% mutate(
+  PITCHING_SO = ifelse(is.na(train$PITCHING_SO), median(train$PITCHING_SO, na.rm = TRUE),train$PITCHING_SO),
+  BATTING_SO = ifelse(is.na(train$BATTING_SO), median(train$BATTING_SO, na.rm = TRUE), train$BATTING_SO),
+  BASERUN_SB = ifelse(is.na(train$BASERUN_SB), median(train$BASERUN_SB, na.rm = TRUE), train$BASERUN_SB),
+  BASERUN_CS = ifelse(is.na(train$BASERUN_CS), median(train$BASERUN_CS, na.rm = TRUE), train$BASERUN_CS),
+  FIELDING_DP = ifelse(is.na(train$FIELDING_DP), median(train$FIELDING_DP, na.rm = TRUE), train$FIELDING_DP))
+```
+
+
+### Feature engineering
+We’ll add a new variable BATTING_HBP_YN that is 1 when the TEAM_BATTING_HBP exists and 0 when it does not.
+```{r}
+train_clean = train_clean %>% mutate(BATTING_HBP_YN = ifelse(is.na(BATTING_HBP), 0, 1),
+                                     BATTING_1B = BATTING_H - BATTING_2B - BATTING_3B - BATTING_HR)
+```
+
+Creat ratios: 
+TARGET_WINS_Ratio = TARGET_WINS / 162 (i.e. the percentage of wins)
+TEAM_H_Ratio = (TEAM_BATTING_1B + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_HR) / TEAM_PITCHING_H (i.e. the ratio of hits earned to hits allowed)
+TEAM_BASERUN_Ratio = TEAM_BASERUN_SB / TEAM_BASERUN_CS (i.e. the ratio of successful steals to unsuccessful ones)
+TEAM_HR_SO_Ratio = TEAM_BATTING_HR / TEAM_BATTING_SO (i.e. the ratio of home runs to strikeouts)
+```{r}
+train_clean = train_clean %>%
+  mutate(H_Ratio = (BATTING_1B + BATTING_2B + BATTING_3B + BATTING_HR) / PITCHING_H,
+         BASERUN_Ratio = BASERUN_SB / BASERUN_CS,
+         HR_SO_Ratio = BATTING_HR / ifelse(BATTING_SO == 0, median(BATTING_SO), BATTING_SO))
+```
+
+
+3. BUILD MODELS (25 Points)
+Using the training data set, build at least three different multiple linear regression models, using different variables (or the same variables with different transformations). Since we have not yet covered automated variable selection methods, you should select the variables manually (unless you previously learned Forward or Stepwise selection, etc.). Since you manually selected a variable for inclusion into the model or exclusion into the model, indicate why this was done.
+Discuss the coefficients in the models, do they make sense? For example, if a team hits a lot of Home Runs, it would be reasonably expected that such a team would win more games. However, if the coefficient is negative (suggesting that the team would lose more games), then that needs to be discussed. Are you keeping the model even though it is counter intuitive? Why? The boss needs to know.
+
+Model 1: Simple linear regression using all features in training dataset
+```{r}
+library(caret)
+train_model1 = train_clean
+train_model1 = train_model1 %>% select(-INDEX,-BATTING_HBP)
+model1 = train(TARGET_WINS ~ ., data = train_model1, method = 'lm', na.action=na.exclude)
+summary(model1)
+```
+
+###Model2 Principal Component Analysis 
+Given there is strong multicolinearity among variable, it is better to conduct principal component analysis on dataset in order to eliminate the colinearity. 
+
+```{r,echo=FALSE}
+library(factoextra)
+train_model2 = train_clean
+train_model2 = train_model2 %>% 
+        select(-INDEX,-BATTING_HBP)%>%
+        na.omit()
+prin_comp <- prcomp(train_model2%>%select(-TARGET_WINS), scale. = T)
 ```
 
 ```{r}
-train_complete <- na.omit(train)
+biplot(prin_comp, scale = 0)
 ```
 
 ```{r}
-corr_train <- cor(train, use = "complete.obs")
-corrplot(corr_train, type = "upper")
-```
-
-The correlation plot shows that TARGET_WINS is positively correlated with BATTING_H, BATTING_2B, BATTING_HR, BATTING_BB, PITCHING_H, PITCHING_HR, PITCHING_BB and negatively correlated with FIELDING_E. Thus we are going to construct our linear model by selecting from these attributes.
-
-
-```{r}
-train_select <- train %>% 
-  select("TARGET_WINS",
-         "BATTING_H", 
-         "BATTING_2B",
-         "BATTING_HR",
-         "BATTING_BB",
-         "PITCHING_H",
-         "PITCHING_HR",
-         "PITCHING_BB",
-         "FIELDING_E")
-```
-
-
-```{r}
-pairs.panels(train_select, method = "pearson")
+std_dev <- prin_comp$sdev
+pr_var <- std_dev^2
+prop_varex <- pr_var/sum(pr_var)
+ plot(prop_varex, xlab = "Principal Component",
+             ylab = "Proportion of Variance Explained",
+             type = "b")
 ```
 
 ```{r}
-par(mfrow=c(2,2))
-plot(train$BATTING_H, train$TARGET_WINS)
-plot(log(train$BATTING_H), train$TARGET_WINS)
-plot(train$BATTING_H, log(train$TARGET_WINS))
-plot(log(train$BATTING_H), log(train$TARGET_WINS))
-
-par(mfrow=c(2,2))
-plot(train$BATTING_H, train$TARGET_WINS)
-plot(sqrt(train$BATTING_H), train$TARGET_WINS)
-plot(train$BATTING_H, sqrt(train$TARGET_WINS))
-plot(sqrt(train$BATTING_H), sqrt(train$TARGET_WINS))
+plot(cumsum(prop_varex), xlab = "Principal Component",
+              ylab = "Cumulative Proportion of Variance Explained",
+              type = "b")
 ```
-
-Not much differences were made after the transformations.
+This plot shows that 15 components results in variance close to ~ 98%. Therefore, in this case, we’ll select number of components as 15 [PC1 to PC15] and proceed to the modeling stage. This completes the steps to implement PCA on train data. For modeling, we’ll use these 15 components as predictor variables and follow the normal procedures.
 
 ```{r}
-lm1 <- lm(TARGET_WINS ~ log(BATTING_H), data = train_complete)
-summary(lm1)
+model2_pca.data <- data.frame(TARGET_WINS = train_model2$TARGET_WINS, prin_comp$x)
+model2_pca.data = model2_pca.data[1:16]
+model2 = train(TARGET_WINS ~ ., data = model2_pca.data , method = 'lm', na.action=na.exclude)
+summary(model2)
 ```
 
-```{r}
-par(mfrow=c(2,2))
-plot(train$BATTING_2B, train$TARGET_WINS)
-plot(log(train$BATTING_2B), train$TARGET_WINS)
-plot(train$BATTING_2B, log(train$TARGET_WINS))
-plot(log(train$BATTING_2B), log(train$TARGET_WINS))
 
-par(mfrow=c(2,2))
-plot(train$BATTING_2B, train$TARGET_WINS)
-plot(sqrt(train$BATTING_2B), train$TARGET_WINS)
-plot(train$BATTING_2B, sqrt(train$TARGET_WINS))
-plot(sqrt(train$BATTING_2B), sqrt(train$TARGET_WINS))
+```{r}
+model3 <- lm(TARGET_WINS ~ BATTING_H+BATTING_2B+BATTING_3B+BATTING_HR+BATTING_BB+BATTING_HBP-BATTING_SO+BASERUN_SB-BASERUN_CS-FIELDING_E+FIELDING_DP-PITCHING_BB-PITCHING_H-PITCHING_HR+PITCHING_SO, data = train_clean)
+summary(model3)
 ```
 
+
+Compare the RMSE(Root Mean Squared Error) among the 3 models - model 3 appears to have the lowest RMSE
 ```{r}
-lm2 <- lm(TARGET_WINS ~ BATTING_2B, data = train)
-summary(lm2)
+fit1 <- fitted.values(model1)
+error1 <- fit1 - test$TARGET_WINS
+rmse1 <- sqrt(mean(error1^2))
+rmse1
+```
+
+
+
+```{r}
+fit2 <- fitted.values(model2)
+error2 <- fit2 - test$TARGET_WINS
+rmse2 <- sqrt(mean(error2^2))
+rmse2
 ```
 
 ```{r}
-par(mfrow=c(2,2))
-plot(train$BATTING_BB, train$TARGET_WINS)
-plot(log(train$BATTING_BB), train$TARGET_WINS)
-plot(train$BATTING_BB, log(train$TARGET_WINS))
-plot(log(train$BATTING_BB), log(train$TARGET_WINS))
-
-par(mfrow=c(2,2))
-plot(train$BATTING_BB, train$TARGET_WINS)
-plot(sqrt(train$BATTING_BB), train$TARGET_WINS)
-plot(train$BATTING_BB, sqrt(train$TARGET_WINS))
-plot(sqrt(train$BATTING_BB), sqrt(train$TARGET_WINS))
+fit3 <- fitted.values(model3)
+error3 <- fit3 - test$TARGET_WINS
+rmse3 <- sqrt(mean(error3^2))
+rmse3
 ```
 
-```{r}
-lm3 <- lm(TARGET_WINS ~ log(BATTING_BB), data = train_complete)
-summary(lm3)
-```
+## Model selection rationale
+
+As discussed above, we selected Model2, which was based on principal component analysis, followed by removal of any highly collinear variables. Although Model2 did not have the lowest RMSE, it was the most stable (little collinearity between variables).
+
+Inference and regression diagnostics
+
+For our inferences to be valid, we need to perform some regression diagnostics and validate some assumptions:
+
+Independence of errors: Based on the residual plot below, the residuals appear random over the index values
+Outliers and leverage: Based on the leverage plots below, there do not appear to be any data points exerting undue leverage on the regression
+Normality: Based on the qq-plot below, the residuals are fairly normally distributed, although there are some outliers in the tails
+Constant variance: Based on the spread-level plot below, variance appears relatively constant, although again with a few outliers
