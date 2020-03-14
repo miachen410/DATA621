@@ -1,0 +1,10 @@
+---
+title: 'DATA 621 - Homework #2'
+author: "Mia Chen"
+date: "3/14/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
