@@ -1,15 +1,15 @@
 ---
-title: 'DATA 621 - Homework #2'
-author: "Mia Chen, Wei Zhou"
-date: "3/14/2020"
-output: pdf_document
+title: "Data621_weizhou_miachen"
+author: "Wei Zhou / Mia Chen"
+date: "3/15/2020"
+output:
+  pdf_document: 
+    latex_engine: xelatex
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
-library(caret)
-library(pROC)
 library(ggplot2)
 ```
 
@@ -60,7 +60,6 @@ accuracy <- function(dt) {
   TP <- df %>% filter(class==1 & pred_class==1) %>% select(Freq)
   return((TP+TN)/(TP+FP+TN+FN))
 }
-
 accuracy(data)
 ```
 
@@ -77,7 +76,6 @@ error_rate <- function(dt) {
   TP <- df %>% filter(class==1 & pred_class==1) %>% select(Freq)
   return((FP+FN)/(TP+FP+TN+FN))
 }
-
 error_rate(data)
 ```
 
@@ -101,7 +99,6 @@ precision <- function(dt) {
   TP <- df %>% filter(class==1 & pred_class==1) %>% select(Freq)
   return((TP)/(TP+FP))
 }
-
 precision(data)
 ```
 
@@ -119,7 +116,6 @@ sensitivity <- function(dt) {
   TP <- df %>% filter(class==1 & pred_class==1) %>% select(Freq)
   return((TP)/(TP+FN))
 }
-
 sensitivity(data)
 ```
 
@@ -137,7 +133,6 @@ specificity <- function(dt) {
   TP <- df %>% filter(class==1 & pred_class==1) %>% select(Freq)
   return((TN)/(TN+FP))
 }
-
 specificity(data)
 ```
 
@@ -150,25 +145,79 @@ $$F1 \ Score =\frac{2 \times Precision \times Sensitivity}{Precision +Sensitivit
 f1_score <- function(dt) {
   return( (2*precision(dt)*sensitivity(dt)) / (precision(dt)+sensitivity(dt)) )
 }
-
 f1_score(data)
 ```
 
 ### 9. Before we move on, let’s consider a question that was asked: What are the bounds on the F1 score? Show that the F1 score will always be between 0 and 1. (Hint: If 0 < 𝑎 < 1 and 0 < 𝑏 < 1 then 𝑎𝑏 < 𝑎.)
 
-Since 
+$$F1 \ Score =\frac{2 \times Precision \times Sensitivity}{Precision +Sensitivity}$$
 
-$$\ F1 \ Score =\frac{2 \times Precision \times Sensitivity}{Precision +Sensitivity}$$
+Both Precision and Sensitivity have a range from 0 to 1. Consider if 0 < 𝑎 < 1 and 0 < 𝑏 < 1 then 𝑎𝑏 < a.
+
+Therefore,
+
+(Precision x Sensitivity) < Precision
+
+(Precision x Sensitivity) < Sensitivity
+
+(Precision x Sensitivity + Precision x Sensitivity) < (Precision + Sensitivity)
+
+(2 x Precision x Sensitivity) < (Precision + Sensitivity)
 
 
+### 10. Write a function that generates an ROC curve from a data set with a true classification column (class in our example) and a probability column (scored.probability in our example). Your function should return a list that includes the plot of the ROC curve and a vector that contains the calculated area under the curve (AUC). Note that I recommend using a sequence of thresholds ranging from 0 to 1 at 0.01 intervals.
 
-10. Write a function that generates an ROC curve from a data set with a true classification column (class in our 
-example) and a probability column (scored.probability in our example). Your function should return a list
-that includes the plot of the ROC curve and a vector that contains the calculated area under the curve
-(AUC). Note that I recommend using a sequence of thresholds ranging from 0 to 1 at 0.01 intervals.
-11. Use your created R functions and the provided classification output data set to produce all of the
-classification metrics discussed above.
-12. Investigate the caret package. In particular, consider the functions confusionMatrix, sensitivity, and
-specificity. Apply the functions to the data set. How do the results compare with your own functions?
-13. Investigate the pROC package. Use it to generate an ROC curve for the data set. How do the results
-compare with your own functions
+```{r}
+df = read.csv("https://raw.githubusercontent.com/miachen410/DATA621/master/HW%232/classification-output-data.csv")
+
+ROC <- function(df)
+{
+  data1 = df
+  thresholds <- seq(0,1,0.01)
+  Y <- c()
+  X <- c()
+  for (threshod in thresholds) {
+    data1$scored.class <- ifelse(data1$scored.probability > threshod,1,0)
+    X <- append(X,1-specificity(data1))
+    Y <- append(Y,sensitivity(data1))
+    }
+  df1 <- data.frame(X=X,Y=Y)
+  df1 <- na.omit(df1)
+  g <- ggplot(df1,aes(X,Y)) + geom_line() + ggtitle('Custom ROC Curve') +
+    xlab('Specificity') + ylab('Sensitivity')
+  height = (df1$Y[-1]+df1$Y[-length(df1$Y)])/2
+  width = -diff(df1$X)
+  area = round(sum(height*width),4)
+  return(list(Plot =g,AUC = area))
+}
+
+```
+
+### 11. Use your created R functions and the provided classification output data set to produce all of the classification metrics discussed above.
+
+```{r}
+library(knitr)
+Name <- c('Accuracy','Classification Error Rate', 'Precision', 'Sensitivity','Specificity', 'F1 Score')
+Value <- c(accuracy(data), error_rate(data), precision(data), sensitivity(data), specificity(data), f1_score(data))
+df1 <- as.data.frame(cbind(Name, Value))
+kable(df1)
+```
+
+
+### 12. Investigate the caret package. In particular, consider the functions confusionMatrix, sensitivity, and specificity. Apply the functions to the data set. How do the results compare with your own functions?
+
+```{r}
+require("caret")
+df = read.csv("https://raw.githubusercontent.com/miachen410/DATA621/master/HW%232/classification-output-data.csv")
+d_tab <- table(df$class,df$scored.class)
+confusionMatrix(d_tab, reference = df$class)
+```
+
+
+### 13. Investigate the pROC package. Use it to generate an ROC curve for the data set. How do the results compare with your own functions
+
+```{r}
+require("pROC")
+d_roc <- roc(df$class,df$scored.probability)
+plot(d_roc, main = "ROC with pROC")
+```
