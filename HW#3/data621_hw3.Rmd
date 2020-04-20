@@ -2,7 +2,9 @@
 title: "DATA621 - HW#3"
 author: "Mia Chen, Wei Zhou"
 date: "4/12/2020"
-output: pdf_document
+output:
+  html_document:
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -61,7 +63,7 @@ Describe the size and the variables in the crime training data set. Consider tha
 ### Data acquisition
 
 ```{r}
-train <- read.csv("https://raw.githubusercontent.com/miachen410/DATA621/master/HW%233/crime-training-data_modified.csv")
+all_train <- read.csv("https://raw.githubusercontent.com/miachen410/DATA621/master/HW%233/crime-training-data_modified.csv")
 eval <- read.csv("https://raw.githubusercontent.com/miachen410/DATA621/master/HW%233/crime-evaluation-data_modified.csv")
 ```
 
@@ -70,35 +72,35 @@ eval <- read.csv("https://raw.githubusercontent.com/miachen410/DATA621/master/HW
 There are 466 observations and 13 variables in the training dataset.
 
 ```{r}
-str(train)
+str(all_train)
 ```
 
 Just to make the data easier on the eyes, we convert the 1s in `chas` to "Y", if the neighborhood borders Charles River, and 0s to "N", if not.
 
 ```{r}
-train$chas[train$chas == 1] <- "Y"
-train$chas[train$chas == 0] <- "N"
+# all_train$chas[all_train$chas == 1] <- "Y"
+# all_train$chas[all_train$chas == 0] <- "N"
 ```
 
 We also convert the 1s in `target` to "Above", if the crime rate is above the median, and 0s to "Below", if it is below the median.
 
 ```{r}
-train$target[train$target == 1] <- "Above"
-train$target[train$target == 0] <- "Below"
+# all_train$target[all_train$target == 1] <- "Above"
+# all_train$target[all_train$target == 0] <- "Below"
 ```
 
 Since variables `chas` and `target` are categorical, we are going to change their class from integer to factor:
 
 ```{r}
-train$chas <- as.factor(train$chas)
-train$target <- as.factor(train$target)
+all_train$chas <- as.factor(all_train$chas)
+all_train$target <- as.factor(all_train$target)
 ```
 
 Let's look at the data structure again:
 
 ```{r}
 library(dplyr)
-glimpse(train)
+glimpse(all_train)
 ```
 
 ### Summary Statistics
@@ -106,7 +108,7 @@ glimpse(train)
 Looking at the `target` variable, we see 237 observations are below the median crime rate and 229 are above the median crime rate, thus we have roughly the same number of at risk and not-at-risk neighborhoods in our training data set.
 
 ```{r}
-summary(train)
+summary(all_train)
 ```
 
 ### Missing values
@@ -114,7 +116,7 @@ summary(train)
 How many rows of data have NA values? 0 rows, thus there are no missing values in the dataset.
 
 ```{r}
-nrow(train[is.na(train),])
+nrow(all_train[is.na(all_train),])
 ```
 
 ### Visulization of the data set
@@ -124,8 +126,7 @@ Let's first look at the density plots of the numerical variables to view their s
 ```{r}
 library(reshape)
 library(ggplot2)
-
-datasub = melt(train)
+datasub = melt(all_train)
 ggplot(datasub, aes(x = value)) + 
     geom_density(fill = "blue") + 
     facet_wrap(~variable, scales = 'free') 
@@ -134,7 +135,7 @@ ggplot(datasub, aes(x = value)) +
 For categorial variable `chas`, we can look at a confusion matrix table to make sure that we have enough observations for all levels:
 
 ```{r}
-xtabs(~ target + chas, data=train)
+xtabs(~ target + chas, data=all_train)
 ```
 
 Then we will look at the boxplots of the numerical variables in relationship to `target` variable:
@@ -155,19 +156,27 @@ Describe how you have transformed the data by changing the original variables or
 From the boxplots above, we can see there are many outliers so we are going to fix them by replacing with medians.
 
 ```{r}
-train_clean <- train %>% mutate(
-  zn = ifelse(zn > 80, median(zn), zn),
-  indus = ifelse(indus > 20, median(indus), indus),
-  rm = ifelse(rm > 7.5 | rm < 5, median(rm), rm),
-  dis = ifelse(dis > 7.5, median(dis), dis),
-  tax = ifelse(tax >= 700, median(tax), tax),
-  ptratio = ifelse(ptratio < 15, median(ptratio), ptratio),
-  lstat = ifelse(lstat > 23, median(lstat), lstat),
-  medv = ifelse(medv > 35 | medv < 10, median(medv), medv)
-)
+train_clean_pre <- all_train 
+# %>% mutate(
+#   zn = ifelse(zn > 80, median(zn), zn),
+#   indus = ifelse(indus > 20, median(indus), indus),
+#   rm = ifelse(rm > 7.5 | rm < 5, median(rm), rm),
+#   dis = ifelse(dis > 7.5, median(dis), dis),
+#   tax = ifelse(tax >= 700, median(tax), tax),
+#   ptratio = ifelse(ptratio < 15, median(ptratio), ptratio),
+#   lstat = ifelse(lstat > 23, median(lstat), lstat),
+#   medv = ifelse(medv > 35 | medv < 10, median(medv), medv)
+# )
+set.seed(121)
+split <- caret::createDataPartition(train_clean_pre$target, p=0.85, list=FALSE)
+train_clean <- train_clean_pre[split, ]
+validation <- train_clean_pre[ -split, ]
 ```
 
 Let's look at the boxplots again after the outliers being imputed with median.
+
+
+
 
 ```{r}
 ggplot(melt(train_clean), aes(x = target, y = value)) + 
@@ -185,7 +194,7 @@ Be sure to explain how you can make inferences from the model, as well as discus
 We first create a full model by including all the variables: 
 
 ```{r}
-fullMod <- glm(target ~ ., data = train_clean, family = binomial)
+fullMod <- glm(target ~ ., data = train_clean, family = 'binomial')
 summary(fullMod)
 ```
 
@@ -199,7 +208,7 @@ target ~ nox + age + rad + tax + ptratio + lstat
 ```{r}
 logMod1 <- glm(target ~ nox + age + rad + tax + ptratio + lstat, 
                data = train_clean, 
-               family = binomial)
+               family = 'binomial')
 summary(logMod1)
 ```
 
@@ -208,7 +217,6 @@ summary(logMod1)
 
 ```{r}
 library(MASS)
-
 logMod2 <- fullMod %>% stepAIC(direction = "backward", trace = FALSE)
 summary(logMod2)
 ```
@@ -218,8 +226,7 @@ summary(logMod2)
 
 ```{r}
 # Create an empty model with no variables
-emptyMod <- glm(target ~ 1, data = train_clean, family = binomial)
-
+emptyMod <- glm(target ~ 1, data = train_clean, family = 'binomial')
 logMod3 <- emptyMod %>% 
   stepAIC(direction = "forward",
           scope = ~ zn + indus + chas + nox + rm + age + dis 
@@ -242,5 +249,84 @@ formula(logMod3) # Model 3 formula
 ```
 
 
+```{r}
+preds1 =predict(logMod1, newdata = validation)
+preds2 =predict(logMod2, newdata = validation)
+preds3 =predict(logMod3, newdata = validation)
+preds1[preds1 >= 0.5] <- 1
+preds1[preds1 < 0.5] <- 0
+preds1 = as.factor(preds1)
+preds2[preds2 >= 0.5] <- 1
+preds2[preds2 < 0.5] <- 0
+preds2 = as.factor(preds2)
+preds3[preds3 >= 0.5] <- 1
+preds3[preds3 < 0.5] <- 0
+preds3 = as.factor(preds3)
+```
+
+
+```{r}
+library(caret)
+m1cM <- confusionMatrix(preds1, validation$target, mode = "everything")
+m2cM <- confusionMatrix(preds2, validation$target, mode = "everything")
+m3cM <- confusionMatrix(preds3, validation$target, mode = "everything")
+```
+
+```{r}
+fourfoldplot(m1cM$table, color = c("#B22222", "#2E8B57"), main="Model 1")
+fourfoldplot(m2cM$table, color = c("#B22222", "#2E8B57"), main="Model 2")
+fourfoldplot(m3cM$table, color = c("#B22222", "#2E8B57"), main="Model 3")
+```
+## Model2 and model3 has better accuracy and lower error rate
+```{r}
+library(kableExtra)
+temp <- data.frame(m1cM$overall, 
+                   m2cM$overall, 
+                   m3cM$overall) %>%
+  t() %>%
+  data.frame() %>%
+  dplyr::select(Accuracy) %>%
+  mutate(Classification_Error_Rate = 1-Accuracy)
+Summ_Stat <-data.frame(m1cM$byClass, 
+                   m2cM$byClass, 
+                   m3cM$byClass) %>%
+  t() %>%
+  data.frame() %>%
+  cbind(temp) %>%
+  mutate(Model = c("Model 1", "Model 2", "Model 3")) %>%
+  dplyr::select(Model, Accuracy, Classification_Error_Rate, Precision, Sensitivity, Specificity, F1) %>%
+  mutate_if(is.numeric, round,3) %>%
+  kable('html', escape = F) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),full_width = F)
+Summ_Stat
+```
+## Model 2,3 has better AUC
+```{r}
+getROC <- function(model) {
+    name <- deparse(substitute(model))
+    pred.prob1 <- predict(model, newdata = validation)
+    p1 <- data.frame(pred = validation$target, prob = pred.prob1)
+    p1 <- p1[order(p1$prob),]
+    rocobj <- pROC::roc(p1$pred, p1$prob)
+    plot(rocobj, asp=NA, legacy.axes = TRUE, print.auc=TRUE,
+         xlab="Specificity", main = name)
+}
+par(mfrow=c(3,3))
+getROC(logMod1)
+getROC(logMod2)
+getROC(logMod3)
+```
+## Model 2 and 3 has lower AIC. Based on comparison result, we eventually choose Model 2/3 (same model)
+
+
+# Make Prediction 
+```{r}
+eval$chas <- as.factor(eval$chas)
+prediction = predict(logMod2, newdata = eval)
+prediction[prediction >= 0.5] <- 1
+prediction[prediction < 0.5] <- 0
+prediction = as.factor(prediction)
+prediction
+```
 
 
